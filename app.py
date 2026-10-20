@@ -11,57 +11,33 @@ def smule_downloader():
         return jsonify({"status": False, "message": "URL Smule tidak ditemukan!"}), 400
         
     try:
-        # Ekstraksi ID performance dari URL Smule (misal: c/3749097141_5269003944 atau sejenisnya)
-        import re
-        match = re.search(r'([0-9]+_[0-9]+)', link)
-        if not match:
-            return jsonify({"status": False, "message": "Format URL Smule tidak valid!"}), 400
-            
-        perf_id = match.group(1)
-        api_url = f"https://www.smule.com/recording/_/{perf_id}/json"
+        # Menggunakan jalur alternatif API publik yang handal untuk melewati blokir Smule
+        api_endpoint = f"https://api.vkr.cc/api/download/smule?url={link}"
+        headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"}
         
-        headers = {
-            "User-Agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Mobile/15E148 Safari/604.1",
-            "Accept": "application/json, text/javascript, */*; q=0.01",
-            "Referer": link,
-            "X-Requested-With": "XMLHttpRequest"
-        }
-        
-        resp = requests.get(api_url, headers=headers, timeout=15)
-        
+        resp = requests.get(api_endpoint, headers=headers, timeout=15)
         if resp.status_code == 200:
             data = resp.json()
-            audio_url = data.get("performance_url") or data.get("media_url") or ""
-            title = data.get("title", "Smule Recording")
-            username = data.get("owner", {}).get("handle", "Unknown")
-            
-            if not audio_url:
-                # Coba ambil dari struktur alternatif
-                arr_url = data.get("ensemble", {}).get("performance_url")
-                if arr_url:
-                    audio_url = arr_url
+            if data.get("status") and "result" in data:
+                res = data["result"]
+                return jsonify({
+                    "status": True,
+                    "result": {
+                        "username": res.get("owner", "Unknown"),
+                        "title": res.get("title", "Smule Recording"),
+                        "type": "video" if "mp4" in res.get("audio", "") else "audio",
+                        "mp3Url": res.get("audio", ""),
+                        "mp4Url": res.get("video", "") or res.get("audio", ""),
+                        "thumbnail": res.get("cover", ""),
+                        "created": "-",
+                        "listens": "0"
+                    }
+                })
 
-            if not audio_url:
-                return jsonify({"status": False, "message": "Gagal mengambil tautan media dari API Smule."}), 404
-
-            return jsonify({
-                "status": True,
-                "result": {
-                    "username": username,
-                    "title": title,
-                    "type": "audio",
-                    "mp3Url": audio_url,
-                    "mp4Url": audio_url if data.get("type") == "video" else "",
-                    "thumbnail": data.get("cover_url", ""),
-                    "created": "-",
-                    "listens": str(data.get("listen_count", "0"))
-                }
-            })
-        else:
-            return jsonify({"status": False, "message": f"API Smule menolak dengan kode: {resp.status_code}"}), 500
+        return jsonify({"status": False, "message": "Gagal memproses tautan Smule melalui layanan perantara."}), 500
             
     except Exception as e:
-        return jsonify({"status": False, "message": f"Error API: {str(e)}"}), 500
+        return jsonify({"status": False, "message": f"Error: {str(e)}"}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
